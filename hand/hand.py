@@ -93,3 +93,4 @@ for key in fingers:
 for key in angles:
     print(key, degrees(angles[key]))
     
+# test
