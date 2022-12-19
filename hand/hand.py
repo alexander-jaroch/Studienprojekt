@@ -7,19 +7,107 @@ col_seg = bpy.data.collections['Segments']
 
 # representing hand and calculates its parameters
 class Hand:
-    prefix = 'Hand_'
-    points = {}
+    # customizable properties
+    prefix = 'Hand_' 
+    fingers = { 'a': 3, 'b': 4, 'c': 4, 'd': 4, 'e': 4}
     
-    def __init__(self, objects):        
+    # calculated transformaton matrices
+    transform = Matrix()
+    reverse_transform = Matrix()
+    
+    # calculated points, rotations and translations
+    points = {}
+    rotations = {}
+    translations = {}
+    
+    # get a point
+    def point(self, key, i, value = None):
+        if value is not None:
+            self.points[key + str(i)] = value
+        else:
+            value = self.points[key + str(i)]
+        return value
+    
+    # get a rotation
+    def rotation(self, key, i, value = None):
+        if value is not None:
+            self.rotations[key + str(i)] = value
+        else:
+            value = self.rotations[key + str(i)]
+        return value
+    
+    # constructor
+    def __init__(self, objects):   
+        # get points     
         for obj in objects:
             if obj.name.startswith(self.prefix):
                 key = obj.name.replace(self.prefix, '')
                 self.points[key] = obj.location
+                print (obj.location.copy())
+            
+        # calculate transformation matrices
+        self.calc_transform(self.points['f2'], self.points['f1'], self.points['f3'])
+        
+        # iterate finger segments 
+        for key in self.fingers:
+            for i in range(1, self.fingers[key] - 1):
+                p = self.point(key, i + 1)
+                q = self.point(key, i)
+                r = self.point(key, i + 2)
+                s = self.point(key, i + 1)
+    
+                self.rotation(key, i + 1, (p - q).angle(r - s)) 
+    
+    # calculate o vector and axes x, y, z
+    def calc_axes(self, o, x, y):
+        x = x - o
+        y = y - o
+        z = x.cross(y)
+        y = z.cross(x)
+        return o, x.normalized(), y.normalized(), z.normalized()
+            
+    # calculate transformation matrix for hand (f1, f2, f3)  
+    def calc_transform(self, o, x, y):
+        o, x, y, z = self.calc_axes(o, x, y) 
+        
+        rotate = Matrix([x, y, z]).transposed()
+        translate = Matrix.Translation(o)
+        
+        self.transform = translate @ rotate.to_4x4()
+        self.reverse_transform = self.transform.inverted()
+
+        # !!! IMPORTANT !!! transform @ v
+        
+    # dict to string
+    def dict_str(self, name, dict, ident, hide, map = lambda x: x):
+        r = ident + name + ': {'
+        if hide:
+            r += ' <' + str(len(dict)) + ' hidden> '
+        else:
+            r += '\n'
+            for key in dict:
+                r += ident + '  ' + key + ': ' + str(map(dict[key])) + '\n'
+            r += ident
+        return r + '}\n'
+        
+    # object to string
+    def __str__(self):
+        r = 'hand: {\n'
+        r += '  transform:\n' + str(self.transform) + '\n'
+        r += self.dict_str('points', self.points, '  ', True)
+        r += self.dict_str('rotations', self.rotations, '  ', False, lambda x: degrees(x))
+        r += self.dict_str('translations', self.translations, '  ', False)
+        return '\n' + r + '}'
+    
+    # copy points for testing
+    def copy_points(self): 
+        copy = {}
+        for key in self.points:
+            copy[key] = self.points[key].copy()
+        return copy
                 
 hand = Hand(bpy.data.objects)
-#print(hand.points)
-
-        
+print(hand)
 
 # draw a line between two vectors
 def draw_segment(name, v, w):
@@ -60,8 +148,8 @@ def calculate_parameters(draw=False):
     #    print(key, points[key])
         
     # Mittelpunkt berechnen        
-    c = (1/3) * (points['f1'] + points['f2'] + points['f3'])
-    print("c =", c)
+    #c = (1/3) * (points['f1'] + points['f2'] + points['f3'])
+    #print("c =", c)
 
     # Matrix für Koordinatentransformation bestimmen
     def make_matrix(v1, v2, v3):
@@ -166,3 +254,24 @@ bpy.app.handlers.frame_change_post.append(handle_frame_change_post)
 
 # calculate parameters
 calculate_parameters(True)
+
+# create hand from parameters
+def create_hand(parameters):
+    return
+
+hand2points = hand.copy_points()
+hand2points['f2'] = Vector((100, 200, 300))
+
+# validate quality of parameters
+def validate_quality(a, b, verbose = False):
+    sum = 0
+    len = 0
+    for key in a:
+        distance = (b[key] - a[key]).magnitude 
+        if verbose:
+            print(key, distance)
+        sum += distance
+        len += 1
+    return sum / len
+
+print(validate_quality(hand.points, hand2points, True))
